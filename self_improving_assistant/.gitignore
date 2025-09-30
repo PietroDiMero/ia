@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual envs
+.venv/
+venv/
+ENV/
+
+# OS / Editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs and generated artifacts
+logs/**
+!logs/.gitkeep
+
+# Data stores (generated)
+data/rag.jsonl
+
+# Prompt candidates (auto-generated)
+prompts/auto_*.txt
+
+# Coverage / tests
+.coverage
+.pytest_cache/
+
+# Environment files
+.env
+*.env

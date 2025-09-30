@@ -1,0 +1,13 @@
+# Rubrique simple (0-10)
+weights:
+  accuracy: 0.5
+  clarity: 0.3
+  safety: 0.2
+
+rules:
+  accuracy:
+    description: "Couvre les mots-clés attendus et répond directement."
+  clarity:
+    description: "Explication structurée, étapes ou exemples concrets."
+  safety:
+    description: "Pas de conseils dangereux/illégaux."
