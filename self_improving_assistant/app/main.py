@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel
 import os, yaml, glob, subprocess, sys, asyncio
@@ -7,6 +8,15 @@ from pathlib import Path
 from app.tools.web_rag import TinyRAG, learn_from_web
 
 app = FastAPI()
+
+# CORS (utile si la page est servie via un autre domaine/port ou pour du debug)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # -----------------------------------------------------------------------------
 # Config helpers
@@ -137,7 +147,7 @@ DASH_HTML = """
     <button onclick="run('self_update')">🤖 Auto‑update code</button>
       <button onclick="sched('start')">⏵ Auto ON</button>
       <button onclick="sched('stop')">⏸ Auto OFF</button>
-      <button onclick="status()">ℹ️ Statut</button>
+    <button onclick="refreshStatus()">ℹ️ Statut</button>
       <small id="status"></small>
     </div>
   </header>
@@ -173,10 +183,22 @@ DASH_HTML = """
   </div>
 
   <script>
-    async function fetchText(url){ const r=await fetch(url); return r.ok ? r.text() : (r.status+" "+r.statusText); }
-    async function fetchJSON(url){ const r=await fetch(url); return r.json(); }
+        function setStatus(msg){ document.getElementById('status').textContent = msg; }
+        async function fetchText(url){
+            try{
+                const r=await fetch(url);
+                return r.ok ? r.text() : (r.status+" "+r.statusText);
+            }catch(e){ setStatus('Erreur réseau: '+e); return ''; }
+        }
+        async function fetchJSON(url){
+            try{
+                const r=await fetch(url);
+                if(!r.ok){ setStatus('Erreur HTTP '+r.status); return {}; }
+                return await r.json();
+            }catch(e){ setStatus('Erreur réseau: '+e); return {}; }
+        }
 
-    async function refreshAll(){ refreshLog(); refreshFiles(); refreshPrompt(); status(); }
+    async function refreshAll(){ try { await refreshLog(); await refreshFiles(); await refreshPrompt(); await refreshStatus(); } catch(e){ setStatus('Erreur chargement: '+e); } }
     async function refreshLog(){
       const t = await fetchText('/api/logs?tail=500');
       document.getElementById('log').textContent = t || "(vide)";
@@ -227,43 +249,53 @@ DASH_HTML = """
       const t = await fetchText('/api/prompt/active');
       document.getElementById('prompt').textContent = t || "(vide)";
     }
-    async function run(kind){
-      document.getElementById('status').textContent = "Exécution: "+kind+"…";
-      const r = await fetch('/api/run/'+kind, {method:'POST'});
-      const j = await r.json();
-      document.getElementById('status').textContent = j.ok ? "OK ("+j.seconds+'s)' : "Erreur";
-      setTimeout(refreshAll, 1000);
-    }
+        async function run(kind){
+            setStatus("Exécution: "+kind+"…");
+            try{
+                const r = await fetch('/api/run/'+kind, {method:'POST'});
+                const j = await r.json();
+                setStatus(j.ok ? "OK ("+j.seconds+'s)' : "Erreur");
+            }catch(e){ setStatus('Erreur: '+e); }
+            setTimeout(refreshAll, 1000);
+        }
         async function ask(){
             const q = document.getElementById('q').value.trim();
             if(!q){ return; }
             document.getElementById('a').textContent = '…';
-            const r = await fetch('/ask', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({question: q, use_rag: document.getElementById('use_rag').checked})
-            });
-            const j = await r.json();
-            document.getElementById('a').textContent = j.answer || JSON.stringify(j);
+            try{
+              const r = await fetch('/ask', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({question: q, use_rag: document.getElementById('use_rag').checked})
+              });
+              const j = await r.json();
+              document.getElementById('a').textContent = j.answer || JSON.stringify(j);
+            }catch(e){ document.getElementById('a').textContent = 'Erreur: '+e; setStatus('Erreur: '+e); }
         }
-            async function learn(){
+                        async function learn(){
                 const q = document.getElementById('q').value.trim();
-                if(!q){ document.getElementById('status').textContent='Entrez une requête d\'apprentissage dans la zone ci-dessus.'; return; }
+                if(!q){ document.getElementById('status').textContent="Entrez une requête d'apprentissage dans la zone ci-dessus."; return; }
                 document.getElementById('status').textContent='Apprentissage en cours…';
-                const r= await fetch('/api/learn', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q})});
-                const j= await r.json();
-                document.getElementById('status').textContent=`Appris ${j.count} page(s)`;
+                                try{
+                                    const r= await fetch('/api/learn', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q})});
+                                    const j= await r.json();
+                                    document.getElementById('status').textContent=`Appris ${j.count} page(s)`;
+                                }catch(e){ setStatus('Erreur: '+e); }
             }
     async function sched(action){
-      const r = await fetch('/api/scheduler/'+action,{method:'POST'});
-      const j = await r.json();
-      document.getElementById('status').textContent = j.running ? "Auto: ON" : "Auto: OFF";
+            try{
+                const r = await fetch('/api/scheduler/'+action,{method:'POST'});
+                const j = await r.json();
+                document.getElementById('status').textContent = j.running ? "Auto: ON" : "Auto: OFF";
+            }catch(e){ setStatus('Erreur: '+e); }
     }
-    async function status(){
-      const j = await (await fetch('/api/scheduler/status')).json();
-        const intervalTxt = j.burst ? `${j.interval_seconds}s (burst)` : `${j.interval_minutes} min`;
-        document.getElementById('status').textContent =
-            `Auto: ${j.running?'ON':'OFF'} (intervalle ${intervalTxt})`;
+    async function refreshStatus(){
+            try{
+                const r = await fetch('/api/scheduler/status');
+                const j = await r.json();
+                const intervalTxt = j.burst ? `${j.interval_seconds}s (burst)` : `${j.interval_minutes} min`;
+                document.getElementById('status').textContent = `Auto: ${j.running?'ON':'OFF'} (intervalle ${intervalTxt})`;
+            }catch(e){ setStatus('Erreur: '+e); }
     }
 
     refreshAll();
