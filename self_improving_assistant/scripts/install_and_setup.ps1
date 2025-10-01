@@ -10,6 +10,9 @@
 #>
 
 $ErrorActionPreference = "Stop"
+try { Stop-Transcript | Out-Null } catch {}
+$logPath = Join-Path $env:TEMP "SIA_install_$(Get-Date -Format yyyyMMdd_HHmmss).log"
+Start-Transcript -Path $logPath -Force | Out-Null
 
 function Assert-Admin {
     $currentUser = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -39,7 +42,7 @@ function Install-Python {
     $url = 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe'
     $tmp = Join-Path $env:TEMP 'python311_installer.exe'
     Write-Host "Téléchargement de Python depuis python.org…" -ForegroundColor Yellow
-    Invoke-WebRequest -Uri $url -OutFile $tmp
+    Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing
     Write-Host "Installation silencieuse de Python…" -ForegroundColor Yellow
     Start-Process -FilePath $tmp -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1 Include_launcher=1 Include_test=0' -Wait
     Remove-Item $tmp -Force -ErrorAction SilentlyContinue
@@ -112,8 +115,11 @@ try {
     Write-Host "- Le serveur démarrera automatiquement à la connexion (tâche SIA_Server)."
     Write-Host "- Lancement manuel: double-clique le raccourci 'SIA - Démarrer le serveur' sur le Bureau."
     Write-Host "- Ouvre le Dashboard: 'SIA - Dashboard' ou http://127.0.0.1:8000"
+    Write-Host "Journal: $logPath"
 }
 catch {
     Write-Error $_
+    Write-Host "Journal: $logPath" -ForegroundColor Yellow
     exit 1
 }
+finally { try { Stop-Transcript | Out-Null } catch {} }
