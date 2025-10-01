@@ -4,37 +4,66 @@ Ce projet lance une appli web (FastAPI) avec un tableau de bord pour évaluer, f
 
 Ci‑dessous, toutes les commandes PowerShell pour Windows en supposant une installation sur `D:\ia\self_improving_assistant`.
 
-## Prérequis
+## Prérequis (Windows)
 
 * Windows 10/11
-* Python 3.9+ installé et disponible dans PowerShell (`python -V`)
+* Python 3.9+ installé et disponible dans PowerShell (`py -3 -V` ou `python -V`)
 * Accès Internet si vous utilisez OpenAI ou l’apprentissage web
 
-## Installation (PowerShell)
+## Installation (Windows / PowerShell)
+
+### Option A — Installation 1‑clic (recommandé)
+
+1. Copiez le dossier `self_improving_assistant` sur votre PC Windows (ex: `D:\ia\self_improving_assistant`).
+2. Double‑cliquez `install_windows.bat`.
+   - Le script élève les droits administrateur puis lance `scripts/install_and_setup.ps1`.
+   - Ce script:
+     - installe Python 3.11 si nécessaire (via winget ou installeur officiel silencieux),
+     - crée le venv et installe les dépendances (requirements.txt),
+     - ouvre le port 8000 dans le pare‑feu Windows,
+     - crée/actualise les tâches planifiées (`SIA_Server` au logon + jobs nocturnes),
+     - crée 2 raccourcis sur le Bureau: « SIA - Démarrer le serveur » et « SIA - Dashboard ».
+
+Après l'installation:
+- Le serveur démarre automatiquement à votre connexion (tâche planifiée `SIA_Server`).
+- Le dashboard est accessible sur http://127.0.0.1:8000
+- Vous pouvez lancer manuellement via les raccourcis Bureau.
+
+### Option B — Manuel (déjà existant)
 
 ```powershell
-# 1) Créer le dossier de travail sur D:\
 New-Item -ItemType Directory -Path 'D:\ia\self_improving_assistant' -Force | Out-Null
 Set-Location 'D:\ia\self_improving_assistant'
 
-# 2) Copier/extraire le projet ici OU cloner un dépôt git
+# Copier/extraire le projet OU cloner
 # git clone <URL_DU_DEPOT> .
 
-# 3) Créer et activer l'environnement virtuel
-python -m venv .venv
+# Créer/activer le venv puis installer les dépendances
+py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-
-# 4) Mettre à jour pip et installer les dépendances
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
+
+# (Optionnel) Clé OpenAI pour résumer les pages lors de l'ingestion
+setx OPENAI_API_KEY "sk-..."   # persistant pour l’utilisateur
 ```
 
-## Démarrer le serveur web
+## Démarrer le serveur web (Windows)
 
 ```powershell
 # Depuis D:\ia\self_improving_assistant (venv activé)
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 # Ouvrir ensuite http://localhost:8000 dans le navigateur
+```
+
+## Scripts Windows fournis
+
+```powershell
+# Depuis D:\ia\self_improving_assistant
+.\run_server.bat      # lance le serveur FastAPI (dashboard)
+.\run_eval.bat        # évaluation
+.\run_abtest.bat      # A/B test
+.\run_promote.bat     # promotion
 ```
 
 ## Lancer les scripts manuellement
@@ -56,26 +85,29 @@ python scripts\grow.py
 python scripts\self_update.py
 ```
 
-## Utiliser les .bat fournis (option Windows)
-
-```powershell
-# Depuis D:\ia\self_improving_assistant
-.\run_eval.bat
-.\run_abtest.bat
-.\run_promote.bat
-```
-
-Ces scripts créent le venv si nécessaire, installent les dépendances puis lancent l’action.
-
-## Tâches planifiées (Windows Task Scheduler)
+## Automatisation (Windows Task Scheduler)
 
 ```powershell
 # Si PowerShell bloque les scripts, autoriser localement
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
 
-# Créer les tâches planifiées (éval, A/B, promotion)
+# Créer les tâches planifiées (server au logon + éval + A/B + promotion)
 .\setup_tasks.ps1
+
+Après cela:
+- SIA_Server démarre automatiquement le serveur à l’ouverture de session et le garde actif.
+- SIA_Evaluate / SIA_ABTest / SIA_Promote tournent la nuit (horaires dans setup_tasks.ps1).
 ```
+
+### Option C — Générer un EXE d’installation
+
+Si vous souhaitez un exécutable autonome « SIA‑Installer.exe » pour distribuer l’installation:
+
+1. Sur une machine Windows, installez PyInstaller: `py -3 -m pip install pyinstaller`
+2. Depuis le dossier `self_improving_assistant`, exécutez: `py -3 scripts/build_windows_installer.py`
+3. Récupérez `dist/SIA-Installer.exe`.
+
+Au lancement, cet EXE appellera le script PowerShell d'installation (`scripts/install_and_setup.ps1`).
 
 ## Configuration du provider LLM (facultatif)
 
@@ -121,7 +153,12 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
 ```
 
 * “python n’est pas reconnu” : réinstallez Python depuis python.org et cochez “Add to PATH”.
-* Avertissement urllib3/LibreSSL (non bloquant) vu sur macOS — pas concerné sur Windows.
+* Erreur “python n’est pas reconnu”: réinstallez Python depuis python.org et cochez “Add to PATH”.
+* Port 8000 occupé: changez `--port 8001`.
+
+## (Optionnel) macOS — démarrage et automatisation
+
+Voir les scripts `scripts/run_server.sh` et `scripts/install_launchd.sh`.
 
 ## Structure utile
 

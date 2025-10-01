@@ -20,18 +20,62 @@ paths:
 
 scheduler:
   enabled: true
-  interval_minutes: 5   # 1 pour test intensif, 5 conseillé en continu
-  interval_seconds: 5   # utilisé si burst=true
-  burst: false          # si true, enchaîne les cycles avec un petit délai (interval_seconds)
+  interval_minutes: 5   # fallback si burst=false
+  interval_seconds: 60  # cadence en mode burst (1 cycle/min)
+  burst: true           # enchaîne les cycles avec un petit délai (interval_seconds)
   min_promotion_gain: 0.01   # gain minimal vs actif pour promouvoir
   cooldown_minutes: 30       # anti-promotions en rafale
   sample_tests: 50           # nb max de tests tirés au sort par cycle
   script_timeout_seconds: 180  # coupe une exécution pour éviter les blocages UI
 
 self_update:
-  enabled: false              # activer pour tenter des changements de code automatiques
+  enabled: true               # activer changements de code automatiques
   min_gain: 0.01              # amélioration minimale de avg_score pour accepter le patch
   allow_paths: ["app/", "scripts/", "prompts/"]  # répertoires autorisés
   max_files: 3                # limite de fichiers modifiés par itération
   dry_run: false              # true pour proposer sans appliquer
   explain: true               # garder une note d'explication dans logs
+  provider: "openai"         # provider spécifique pour self_update (ne change pas l'inférence globale)
+  model: "gpt-4o-mini"
+
+rag:
+  store_path: "data/rag.jsonl"
+  search:
+    enabled: true
+    max_results: 3
+    # Requêtes apprenantes: l'assistant ira chercher sur le web et stockera des chunks
+    queries:
+      - "macOS command line tips site:apple.com"
+      - "git best practices branching strategy"
+      - "python virtualenv usage tutorial"
+  rss:
+    enabled: false
+    feeds: []   # ex: ["https://news.ycombinator.com/rss", "https://realpython.com/atom.xml"]
+    limit_per_feed: 3
+  security:
+    allow_domains: ["docs.python.org", "git-scm.com", "apple.com", "brew.sh", "realpython.com"]
+    block_domains: ["localhost", "127.0.0.1", "0.0.0.0"]
+    allowed_schemes: ["http", "https"]
+    respect_robots: true
+    max_pages_per_domain: 5   # limite par cycle
+    rate_limit_per_domain: 6  # requêtes par minute et par domaine (~1 toutes les 10s)
+    timeout_seconds: 20
+    max_chars_per_page: 20000
+    disallow_private_ips: true   # empêche IP locales/privées
+    user_agent: "SelfImprover/1.0 (+https://local)"
+    redact_patterns:           # expressions à occulter avant envoi externe / stockage
+      - '(?i)authorization:\\s*bearer\\s+[a-z0-9_\-\.]+'
+      - '(?i)api[_-]?key\\s*[:=]\\s*[a-z0-9]{16,}'
+      - '[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+'
+  summarize:
+    enabled: true             # si true, envoie un extrait à OpenAI pour résumer
+    provider: "openai"
+    model: "gpt-4o-mini"
+    max_input_chars: 8000     # limite de texte source envoyé au LLM
+    max_tokens: 600           # taille du résumé
+    store_raw: false          # si false, ne stocke que le résumé (pas le texte brut)
+    prompt: |
+      Résume le contenu suivant en points clés factuels et concis, adaptés à de futures réponses techniques.
+      - Conserve les commandes, options et exemples concrets
+      - Évite les formulations vagues, pas d'opinions
+      - Liste courte et structurée, 10 points maximum

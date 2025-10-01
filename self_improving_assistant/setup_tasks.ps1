@@ -20,7 +20,7 @@ foreach ($f in @($evalBat, $abtestBat, $promoteBat)) {
 }
 
 # Nettoyage (évite les échecs si la tâche existe déjà)
-$taskNames = @("SIA_Evaluate","SIA_ABTest","SIA_Promote")
+$taskNames = @("SIA_Evaluate","SIA_ABTest","SIA_Promote","SIA_Server")
 foreach ($t in $taskNames) {
     try { Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue } catch {}
 }
@@ -38,6 +38,8 @@ $trigger3 = New-ScheduledTaskTrigger -Daily -At 03:25
 $action1 = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"$evalBat`""
 $action2 = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"$abtestBat`""
 $action3 = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"$promoteBat`""
+$serverBat = Join-Path $root "run_server.bat"
+$actionSrv = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"$serverBat`""
 
 # Réglages de la tâche (robustes sur portables et retards éventuels)
 $settings = New-ScheduledTaskSettingsSet `
@@ -52,7 +54,13 @@ Register-ScheduledTask -TaskName "SIA_Evaluate" -Action $action1 -Trigger $trigg
 Register-ScheduledTask -TaskName "SIA_ABTest"   -Action $action2 -Trigger $trigger2 -Principal $principal -Settings $settings | Out-Null
 Register-ScheduledTask -TaskName "SIA_Promote"  -Action $action3 -Trigger $trigger3 -Principal $principal -Settings $settings | Out-Null
 
+# Server: run at user logon and keep running (no strict time limit)
+$triggerSrv = New-ScheduledTaskTrigger -AtLogOn
+$settingsSrv = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances Parallel -ExecutionTimeLimit (New-TimeSpan -Days 7)
+Register-ScheduledTask -TaskName "SIA_Server" -Action $actionSrv -Trigger $triggerSrv -Principal $principal -Settings $settingsSrv | Out-Null
+
 Write-Host "Tasks created:"
 Write-Host " - SIA_Evaluate @ 03:00"
 Write-Host " - SIA_ABTest   @ 03:15"
 Write-Host " - SIA_Promote  @ 03:25"
+Write-Host " - SIA_Server   @ Logon"

@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Response
+import json
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel
 import os, yaml, glob, subprocess, sys, asyncio
 from datetime import datetime
 from pathlib import Path
-from app.tools.web_rag import TinyRAG, learn_from_web
+from .tools.web_rag import TinyRAG, learn_from_web
 
 app = FastAPI()
 
@@ -113,69 +114,91 @@ def ask(req: AskReq):
 # -----------------------------------------------------------------------------
 # Dashboard (HTML)
 # -----------------------------------------------------------------------------
+"""
+# Dashboard (HTML)
+"""
 DASH_HTML = """
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>Self-Improving Assistant – Dashboard</title>
+    <title>Self-Improving Assistant — Dashboard</title>
   <style>
-    :root { font-family: ui-sans-serif, system-ui, sans-serif; color-scheme: light dark; }
-    body { margin: 0; padding: 16px; }
-    header { display:flex; gap:12px; align-items:center; margin-bottom: 12px; flex-wrap: wrap; }
-    button { padding:8px 12px; border-radius:10px; border:1px solid #8884; cursor:pointer; }
-    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
-    .card { border:1px solid #8884; border-radius:16px; padding:12px; background:rgba(127,127,127,0.05); }
-    h1,h2,h3 { margin:0 0 8px; }
-    pre { background:#0002; padding:8px; border-radius:8px; max-height:50vh; overflow:auto; white-space:pre-wrap; }
-    table { width:100%; border-collapse: collapse; }
-    th,td { border-bottom:1px solid #8883; padding:6px 8px; text-align:left; }
-    small{opacity:.7}
-    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
-    code{background:#0002; padding:2px 6px; border-radius:6px;}
+        :root { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color-scheme: light dark; }
+        body { margin: 0; padding: 16px; background: linear-gradient(180deg, rgba(127,127,127,0.06), transparent 180px); }
+        header { display:flex; gap:16px; align-items:center; margin-bottom: 14px; flex-wrap: wrap; }
+        h1 { margin:0; font-size: 20px; letter-spacing: 0.3px; }
+        .btn { padding:8px 12px; border-radius:10px; border:1px solid #8884; cursor:pointer; background: #fff1; backdrop-filter: blur(6px); }
+        .btn.primary { background: #4f46e5; color:#fff; border-color: #4f46e5; }
+        .btn.warn { background: #d97706; color:#fff; border-color: #d97706; }
+        .btn.ghost{ background: transparent; }
+        .grid { display:grid; grid-template-columns: 1.2fr 1fr; gap:16px; }
+        .card { border:1px solid #8883; border-radius:16px; padding:12px; background:rgba(127,127,127,0.06); box-shadow: 0 2px 12px rgba(0,0,0,.05); }
+        h2,h3 { margin:0 0 8px; font-size: 15px; }
+        pre { background:#0003; padding:8px; border-radius:8px; max-height:50vh; overflow:auto; white-space:pre-wrap; }
+        table { width:100%; border-collapse: collapse; font-size: 13px; }
+        th,td { border-bottom:1px solid #8882; padding:6px 8px; text-align:left; }
+        small{opacity:.7}
+        .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+        .stats { display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; margin: 8px 0 12px; }
+        .stat { background:#4f46e5; color:#fff; border-radius:12px; padding:10px; box-shadow: 0 2px 10px rgba(79,70,229,.3); }
+        .stat h3{ margin:0; font-weight:600; font-size:12px; opacity:.9; }
+        .stat .v{ font-size: 18px; font-weight:700; }
+        .muted{ opacity:.75 }
+        textarea { width:100%; padding:6px 8px; border-radius:8px; border:1px solid #8883; background: #fff1; }
+        a { color: #2563eb; text-decoration: none; }
   </style>
 </head>
 <body>
   <header>
-    <h1 style="margin:0;">Self-Improving Assistant — Dashboard</h1>
-    <div class="row">
-      <button onclick="run('evaluate')">▶ Évaluer</button>
-      <button onclick="run('ab_test')">▶ A/B test</button>
-      <button onclick="run('promote')">▶ Promouvoir</button>
-    <button onclick="learn()">🔎 Apprendre du web</button>
-            <button onclick="run('grow')">🌱 Générer candidats</button>
-    <button onclick="run('self_update')">🤖 Auto‑update code</button>
-      <button onclick="sched('start')">⏵ Auto ON</button>
-      <button onclick="sched('stop')">⏸ Auto OFF</button>
-    <button onclick="refreshStatus()">ℹ️ Statut</button>
-      <small id="status"></small>
-    </div>
+        <h1>Self-Improving Assistant — Dashboard</h1>
+        <div class="row">
+            <button class="btn" onclick="run('ingest')">🧠 Ingestion</button>
+            <button class="btn" onclick="run('evaluate')">🧪 Évaluer</button>
+            <button class="btn" onclick="run('ab_test')">A/B test</button>
+            <button class="btn" onclick="run('promote')">⬆️ Promouvoir</button>
+            <button class="btn" onclick="run('grow')">🌱 Générer candidats</button>
+            <button class="btn" onclick="run('self_update')">🤖 Auto‑update code</button>
+            <button class="btn primary" onclick="cycleNow()">⚡ Cycle maintenant</button>
+            <button class="btn ghost" onclick="sched('start')">⏵ Auto ON</button>
+            <button class="btn ghost" onclick="sched('stop')">⏸ Auto OFF</button>
+            <button class="btn warn" onclick="turbo('on')">🚀 Turbo ON</button>
+            <button class="btn ghost" onclick="turbo('off')">Turbo OFF</button>
+            <small id="status" class="muted"></small>
+        </div>
   </header>
+
+    <section class="stats">
+        <div class="stat"><h3>Auto</h3><div class="v" id="stat_auto">…</div><small id="stat_interval" class="muted"></small></div>
+        <div class="stat"><h3>RAG docs</h3><div class="v" id="stat_docs">0</div><small id="stat_last_src" class="muted"></small></div>
+        <div class="stat"><h3>Dernier ingest</h3><div class="v" id="stat_ingest">0</div><small id="stat_ingest_src" class="muted"></small></div>
+        <div class="stat"><h3>Turbo</h3><div class="v" id="stat_turbo">OFF</div><small class="muted">Mode rapide</small></div>
+    </section>
 
   <div class="grid">
     <section class="card">
       <h2>📜 Logs (cron.log)</h2>
       <div class="row">
-        <button onclick="refreshLog()">⟳ Actualiser</button>
-        <small>auto-refresh toutes les 2s</small>
+                <button class="btn" onclick="refreshLog()">⟳ Actualiser</button>
+                <small class="muted">auto-refresh toutes les 2s</small>
       </div>
       <pre id="log">Chargement…</pre>
     </section>
 
     <section class="card">
-      <h2>🧪 Derniers résultats</h2>
+            <h2>🧪 Résultats & QA</h2>
       <div id="files"></div>
       <h3>Prompt actif</h3>
       <pre id="prompt">Chargement…</pre>
             <h3>Poser une question</h3>
             <div>
-                        <textarea id="q" rows="3" style="width:100%;"></textarea>
+                                                <textarea id="q" rows="3"></textarea>
                         <label style="display:inline-flex;gap:6px;align-items:center;margin-top:4px;">
                             <input type="checkbox" id="use_rag"/> utiliser la base (RAG)
                         </label>
                 <div class="row" style="margin-top:6px;">
-                    <button onclick="ask()">Demander</button>
-                    <small>via /ask</small>
+                                        <button class="btn" onclick="ask()">Demander</button>
+                                        <small class="muted">via /ask</small>
                 </div>
                 <pre id="a"></pre>
             </div>
@@ -184,21 +207,10 @@ DASH_HTML = """
 
   <script>
         function setStatus(msg){ document.getElementById('status').textContent = msg; }
-        async function fetchText(url){
-            try{
-                const r=await fetch(url);
-                return r.ok ? r.text() : (r.status+" "+r.statusText);
-            }catch(e){ setStatus('Erreur réseau: '+e); return ''; }
-        }
-        async function fetchJSON(url){
-            try{
-                const r=await fetch(url);
-                if(!r.ok){ setStatus('Erreur HTTP '+r.status); return {}; }
-                return await r.json();
-            }catch(e){ setStatus('Erreur réseau: '+e); return {}; }
-        }
+                async function fetchText(url){ try{ const r=await fetch(url); return r.ok ? r.text() : (r.status+" "+r.statusText);}catch(e){ setStatus('Erreur réseau: '+e); return ''; } }
+                async function fetchJSON(url, init){ try{ const r=await fetch(url, init); if(!r.ok){ setStatus('Erreur HTTP '+r.status); return {}; } return await r.json(); }catch(e){ setStatus('Erreur réseau: '+e); return {}; } }
 
-    async function refreshAll(){ try { await refreshLog(); await refreshFiles(); await refreshPrompt(); await refreshStatus(); } catch(e){ setStatus('Erreur chargement: '+e); } }
+        async function refreshAll(){ try { await refreshLog(); await refreshFiles(); await refreshPrompt(); await refreshStatus(); await refreshRagStats(); await refreshIngest(); } catch(e){ setStatus('Erreur chargement: '+e); } }
     async function refreshLog(){
       const t = await fetchText('/api/logs?tail=500');
       document.getElementById('log').textContent = t || "(vide)";
@@ -207,43 +219,43 @@ DASH_HTML = """
             const data = await fetchJSON('/api/files?limit=5');
       const el = document.getElementById('files');
       let html = '';
-      if (data.eval.length){
+            if (data.eval?.length){
         html += '<h3>Évaluations</h3><table><tr><th>Fichier</th><th>Score moyen</th></tr>';
         for(const row of data.eval){
           html += `<tr><td><a href="/api/file?path=${encodeURIComponent(row.path)}" target="_blank">${row.name}</a></td><td>${row.avg ?? ''}</td></tr>`;
         }
         html += '</table>';
-                if (data.more_eval>0){ html += `<small>+ ${data.more_eval} de plus… <a href="#" onclick="showMore('eval')">voir tout</a></small>`; }
+                                if (data.more_eval>0){ html += `<small class="muted">+ ${data.more_eval} de plus… <a href="#" onclick="showMore('eval')">voir tout</a></small>`; }
       }
-      if (data.ab.length){
+            if (data.ab?.length){
         html += '<h3>A/B tests</h3><table><tr><th>Fichier</th></tr>';
         for(const row of data.ab){
           html += `<tr><td><a href="/api/file?path=${encodeURIComponent(row.path)}" target="_blank">${row.name}</a></td></tr>`;
         }
         html += '</table>';
-                if (data.more_ab>0){ html += `<small>+ ${data.more_ab} de plus… <a href="#" onclick="showMore('ab')">voir tout</a></small>`; }
+                                if (data.more_ab>0){ html += `<small class="muted">+ ${data.more_ab} de plus… <a href="#" onclick="showMore('ab')">voir tout</a></small>`; }
       }
-      el.innerHTML = html || '<small>Aucun CSV pour le moment.</small>';
+            el.innerHTML = html || '<small class="muted">Aucun CSV pour le moment.</small>';
     }
         async function showMore(kind){
             const data = await fetchJSON('/api/files?limit=1000');
             const el = document.getElementById('files');
             let html = '';
-            if (data.eval.length){
+                        if (data.eval?.length){
                 html += '<h3>Évaluations</h3><table><tr><th>Fichier</th><th>Score moyen</th></tr>';
                 for(const row of data.eval){
                     html += `<tr><td><a href="/api/file?path=${encodeURIComponent(row.path)}" target="_blank">${row.name}</a></td><td>${row.avg ?? ''}</td></tr>`;
                 }
                 html += '</table>';
             }
-            if (data.ab.length){
+                        if (data.ab?.length){
                 html += '<h3>A/B tests</h3><table><tr><th>Fichier</th></tr>';
                 for(const row of data.ab){
                     html += `<tr><td><a href="/api/file?path=${encodeURIComponent(row.path)}" target="_blank">${row.name}</a></td></tr>`;
                 }
                 html += '</table>';
             }
-            el.innerHTML = html || '<small>Aucun CSV pour le moment.</small>';
+                        el.innerHTML = html || '<small class="muted">Aucun CSV pour le moment.</small>';
         }
     async function refreshPrompt(){
       const t = await fetchText('/api/prompt/active');
@@ -252,8 +264,7 @@ DASH_HTML = """
         async function run(kind){
             setStatus("Exécution: "+kind+"…");
             try{
-                const r = await fetch('/api/run/'+kind, {method:'POST'});
-                const j = await r.json();
+                                const j = await fetchJSON('/api/run/'+kind, {method:'POST'});
                 setStatus(j.ok ? "OK ("+j.seconds+'s)' : "Erreur");
             }catch(e){ setStatus('Erreur: '+e); }
             setTimeout(refreshAll, 1000);
@@ -263,12 +274,7 @@ DASH_HTML = """
             if(!q){ return; }
             document.getElementById('a').textContent = '…';
             try{
-              const r = await fetch('/ask', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({question: q, use_rag: document.getElementById('use_rag').checked})
-              });
-              const j = await r.json();
+                            const j = await fetchJSON('/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({question: q, use_rag: document.getElementById('use_rag').checked}) });
               document.getElementById('a').textContent = j.answer || JSON.stringify(j);
             }catch(e){ document.getElementById('a').textContent = 'Erreur: '+e; setStatus('Erreur: '+e); }
         }
@@ -277,26 +283,30 @@ DASH_HTML = """
                 if(!q){ document.getElementById('status').textContent="Entrez une requête d'apprentissage dans la zone ci-dessus."; return; }
                 document.getElementById('status').textContent='Apprentissage en cours…';
                                 try{
-                                    const r= await fetch('/api/learn', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q})});
-                                    const j= await r.json();
+                                                                        const j= await fetchJSON('/api/learn', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q})});
                                     document.getElementById('status').textContent=`Appris ${j.count} page(s)`;
                                 }catch(e){ setStatus('Erreur: '+e); }
             }
     async function sched(action){
             try{
-                const r = await fetch('/api/scheduler/'+action,{method:'POST'});
-                const j = await r.json();
+                                const j = await fetchJSON('/api/scheduler/'+action,{method:'POST'});
                 document.getElementById('status').textContent = j.running ? "Auto: ON" : "Auto: OFF";
             }catch(e){ setStatus('Erreur: '+e); }
     }
     async function refreshStatus(){
             try{
-                const r = await fetch('/api/scheduler/status');
-                const j = await r.json();
-                const intervalTxt = j.burst ? `${j.interval_seconds}s (burst)` : `${j.interval_minutes} min`;
-                document.getElementById('status').textContent = `Auto: ${j.running?'ON':'OFF'} (intervalle ${intervalTxt})`;
+                                const j = await fetchJSON('/api/scheduler/status');
+                                const intervalTxt = j.burst ? `${j.interval_seconds}s (burst)` : `${j.interval_minutes} min`;
+                                document.getElementById('status').textContent = `Auto: ${j.running?'ON':'OFF'} (intervalle ${intervalTxt})`;
+                                document.getElementById('stat_auto').textContent = j.running?'ON':'OFF';
+                                document.getElementById('stat_interval').textContent = `intervalle ${intervalTxt}`;
+                                document.getElementById('stat_turbo').textContent = j.turbo ? 'ON' : 'OFF';
             }catch(e){ setStatus('Erreur: '+e); }
     }
+        async function refreshRagStats(){ try{ const j = await fetchJSON('/api/rag/stats'); document.getElementById('stat_docs').textContent = j.count ?? 0; document.getElementById('stat_last_src').textContent = j.last_source ? ('dernier: '+j.last_source) : ''; }catch(e){} }
+        async function refreshIngest(){ try{ const j = await fetchJSON('/api/ingest/last'); const total = (j.search?.learned_chunks||0) + (j.rss?.learned_chunks||0); document.getElementById('stat_ingest').textContent = total; const srcs = Math.max(j.search?.unique_sources||0, j.rss?.unique_sources||0); document.getElementById('stat_ingest_src').textContent = srcs ? (srcs+ ' source(s)') : ''; }catch(e){} }
+        async function cycleNow(){ setStatus('Cycle en cours…'); const j = await fetchJSON('/api/scheduler/cycle_now', {method:'POST'}); setStatus(j.ok? 'Cycle OK' : 'Erreur'); setTimeout(refreshAll, 1200); }
+        async function turbo(mode){ const j = await fetchJSON('/api/settings/turbo?mode='+mode, {method:'POST'}); setStatus(j.ok? ('Turbo '+mode.toUpperCase()) : 'Erreur'); await refreshStatus(); }
 
     refreshAll();
     setInterval(refreshLog, 2000);
@@ -433,6 +443,11 @@ def api_run_promote():
     ok, s, _ = run_script("scripts/promote.py")
     return {"ok": ok, "seconds": round(s,2)}
 
+@app.post("/api/run/ingest")
+def api_run_ingest():
+    ok, s, _ = run_script("scripts/ingest.py")
+    return {"ok": ok, "seconds": round(s,2)}
+
 @app.post("/api/run/grow")
 def api_run_grow():
     ok, s, _ = run_script("scripts/grow.py")
@@ -456,9 +471,12 @@ def api_learn(req: LearnReq):
 # -----------------------------------------------------------------------------
 _scheduler_task = None
 _scheduler_lock = asyncio.Lock()
+_turbo = False
 
 async def _cycle_once():
     # une itération: évaluer -> A/B -> promouvoir
+    # Apprentissage web (si activé via config RAG; le script est no-op si rien à faire)
+    await asyncio.to_thread(run_script, "scripts/ingest.py")
     # Générer de nouveaux candidats à partir du prompt actif
     await asyncio.to_thread(run_script, "scripts/grow.py")
     # Évaluer
@@ -476,12 +494,16 @@ async def _cycle_once():
             log.write(f"[WEB][{stamp}] [self_update] ERREUR: {e}\n")
 
 async def _scheduler_loop():
-    cfg = load_config()
-    sched = cfg.get("scheduler", {})
-    burst = bool(sched.get("burst", False))
-    interval_min = max(1, int(sched.get("interval_minutes", 60)))
-    interval_sec = max(1, int(sched.get("interval_seconds", 5)))
+    # recharge la config à chaque itération pour prendre en compte les réglages dynamiques
     while True:
+        cfg = load_config()
+        sched = cfg.get("scheduler", {})
+        burst = bool(sched.get("burst", False))
+        interval_min = max(1, int(sched.get("interval_minutes", 60)))
+        interval_sec = max(1, int(sched.get("interval_seconds", 5)))
+        if _turbo:
+            burst = True
+            interval_sec = min(10, interval_sec)
         async with _scheduler_lock:
             try:
                 await _cycle_once()
@@ -520,6 +542,7 @@ def scheduler_status():
         "interval_minutes": cfg.get("scheduler", {}).get("interval_minutes", 60),
         "burst": cfg.get("scheduler", {}).get("burst", False),
         "interval_seconds": cfg.get("scheduler", {}).get("interval_seconds", 5),
+        "turbo": _turbo,
     }
 
 @app.post("/api/scheduler/start")
@@ -540,3 +563,79 @@ async def scheduler_stop():
         except asyncio.CancelledError:
             pass
     return {"ok": True, "running": False}
+
+# Actions avancées
+@app.post("/api/scheduler/cycle_now")
+async def api_cycle_now():
+    async with _scheduler_lock:
+        try:
+            await _cycle_once()
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+def _save_config(cfg: dict):
+    with open(_abs("configs/config.yaml"), "w", encoding="utf-8") as f:
+        yaml.safe_dump(cfg, f, allow_unicode=True, sort_keys=False)
+
+@app.post("/api/settings/turbo")
+def api_turbo(mode: str = "on"):
+    global _turbo
+    _turbo = (mode.lower() == "on")
+    try:
+        cfg = load_config()
+        sec = cfg.get("rag", {}).get("security", {})
+        if _turbo:
+            sec["max_pages_per_domain"] = max(int(sec.get("max_pages_per_domain", 5)), 12)
+            sec["rate_limit_per_domain"] = max(int(sec.get("rate_limit_per_domain", 6)), 20)
+        else:
+            sec["max_pages_per_domain"] = 5
+            sec["rate_limit_per_domain"] = 6
+        cfg.setdefault("rag", {})["security"] = sec
+        sched = cfg.get("scheduler", {})
+        if _turbo:
+            sched["burst"] = True
+            sched["interval_seconds"] = min(int(sched.get("interval_seconds", 60)), 10)
+        cfg["scheduler"] = sched
+        _save_config(cfg)
+    except Exception:
+        pass
+    return {"ok": True, "turbo": _turbo}
+
+@app.get("/api/rag/stats")
+def api_rag_stats():
+    path = _abs("data/rag.jsonl")
+    count = 0
+    last_source = None
+    last_ts = 0
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line: continue
+                    count += 1
+                    try:
+                        obj = json.loads(line)
+                        ts = float(obj.get("ts") or 0)
+                        if ts >= last_ts:
+                            last_ts = ts
+                            meta = obj.get("meta") or {}
+                            last_source = meta.get("source")
+                    except:
+                        pass
+        except Exception:
+            pass
+    return {"count": count, "last_source": last_source, "last_ts": last_ts}
+
+@app.get("/api/ingest/last")
+def api_ingest_last():
+    cfg = load_config()
+    p = os.path.join(_abs(cfg["paths"]["logs_dir"]), "ingest_last.json")
+    if not os.path.exists(p):
+        return {"search": {"learned_chunks": 0, "unique_sources": 0}, "rss": {"learned_chunks": 0, "unique_sources": 0}}
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        return {"error": str(e)}

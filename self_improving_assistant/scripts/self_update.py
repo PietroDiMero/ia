@@ -45,8 +45,10 @@ def last_eval_score(logs_dir):
     return score
 
 def call_llm_system(cfg, sys_prompt, user_prompt):
-    provider = (cfg.get("provider") or "dummy").lower()
-    model = cfg.get("model") or "gpt-4o-mini"
+    # Utilise le provider spécifique à self_update s'il est défini (sinon fallback global)
+    su = cfg.get("self_update", {}) or {}
+    provider = (su.get("provider") or cfg.get("provider") or "dummy").lower()
+    model = su.get("model") or cfg.get("model") or "gpt-4o-mini"
     if provider == "openai":
         try:
             from openai import OpenAI
